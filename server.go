@@ -19,7 +19,6 @@ func main() {
 		defer proxy.Close()
 
 		n, _ := io.Copy(proxy, r.Body)
-		log.Printf("read %d data\n", n)
 		r.Body.Close()
 		if n == 0 {
 			w.Write([]byte("no data"))
@@ -27,8 +26,8 @@ func main() {
 		}
 		w.Header().Set("Content-type", "application/octet-stream")
 		n, _ = io.Copy(w, proxy)
-		log.Printf("write %d data\n", n)
+		//log.Printf("write %d data\n", n)
 	})
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8000", nil))
 }

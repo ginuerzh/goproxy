@@ -2,7 +2,10 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"io"
+	//"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -30,6 +33,7 @@ func main() {
 
 func handleConnection(conn net.Conn) {
 	var rbuf, wbuf [1460]byte
+	buf := new(bytes.Buffer)
 
 	defer conn.Close()
 
@@ -39,35 +43,39 @@ func handleConnection(conn net.Conn) {
 	}
 	defer proxy.Close()
 
-	n, err := conn.Read(rbuf[:])
-	if err != nil {
-		log.Println(err)
-	}
-	log.Printf("read %d data\n", n)
-
-	request, _ := http.NewRequest("POST", "106.187.48.51:8080", bytes.NewBuffer(rbuf[:n]))
-	request.Header.Add("Content-type", "application/octet-stream")
-
-	if n > 0 {
-		var data [4096]byte
-		buf := bytes.NewBuffer(data[:])
-		request.Write(buf)
-		log.Println(string(buf.Bytes()))
-		n, err = proxy.Write(buf.Bytes())
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("write %d data\n", n)
-	}
-
 	for {
-		n, err := proxy.Read(wbuf[:])
+		n, err := conn.Read(rbuf[:])
+		//log.Println(n, err)
 		if n > 0 {
-			conn.Write(wbuf[:n])
+			buf.Write(rbuf[:n])
 		}
-		if err != nil {
-			log.Println(err)
+
+		if n < 1460 || err == io.EOF {
 			break
 		}
 	}
+	//log.Printf("read %d data from request\n", buf.Len())
+	request, _ := http.NewRequest("POST", "http://106.187.48.51:8000/", buf)
+	request.WriteProxy(proxy)
+
+	buf.Reset()
+	for {
+		n, err := proxy.Read(wbuf[:])
+		if n > 0 {
+			buf.Write(wbuf[:n])
+		}
+		//log.Println(n, err)
+		if err == io.EOF {
+			break
+		}
+	}
+	//log.Printf("read %d data from proxy\n", buf.Len())
+
+	resp, err := http.ReadResponse(bufio.NewReader(buf), request)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	io.Copy(conn, resp.Body)
 }
